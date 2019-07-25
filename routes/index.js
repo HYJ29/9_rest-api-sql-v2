@@ -1,28 +1,8 @@
 const express =require('express');
 const bcryptjs = require('bcryptjs');
 const auth = require('basic-auth');
-const fetch = require('node-fetch');
 const router = express.Router();
 const {Course, User} = require('../models');
-const apiKeys = require('../apiKeys');
-
-//validating email middleware
-const validateEmail = (req,res,next) =>{
-  let message = null;
-  fetch(`http://apilayer.net/api/check?access_key=${apiKeys.emailValidate}&email=${req.body.emailAddress}&smtp=1&format=1`)
-    .then(res => res.json())
-    .then(json => {
-      if(json.format_valid){
-        if(!json.smtp_check){
-          console.log(`${json.email} is valid format but not existing email`);
-        }
-          next();
-      } else {
-        message ="Not valid email";
-        res.status(400).json({message});
-      }
-    })
-}
 
 //authenticating middelware
 const authenticateUser = async (req,res,next) =>{
@@ -47,7 +27,9 @@ const authenticateUser = async (req,res,next) =>{
   }
   if(message){
     console.warn(message);
-    res.status(401).json({message:"Access Denied"})
+    const error = new Error(message);
+    error.status = 401;
+    next(error);
   } else {
     next();
   }
@@ -60,7 +42,9 @@ const authorizeUser = (req,res,next) =>{
       if(req.currentUser.id === course.userId){
         next();
       } else {
-        res.status(403).json({message:"Not authorized to access"})
+        const error = new Error("Not authorized to access");
+        error.status = 403;
+        next(error);
       }
     })
 }
@@ -80,28 +64,36 @@ router.get('/users',authenticateUser,(req,res)=>{
     attributes:{exclude:['password','createdAt','updatedAt']}
   }).then(users=>{
     res.status(200).json(users);
-  })
+  }).catch(error=> next(error));
 })
 
 //post a user
-router.post('/users',validateEmail,(req,res)=>{
+router.post('/users',(req,res,next)=>{
   const user = req.body;
-  user.password = bcryptjs.hashSync(user.password);
+  if(user.password){
+    user.password = bcryptjs.hashSync(user.password);
+  }
   User.create(user).then(user=>{
-    res.status(201).redirect('/');
+    res.status(201).location('/').end();
   }).catch(error=>{
     if(error.name==="SequelizeValidationError"){
-      const errorMessages= error.errors.map(error=> error.message);
-      res.status(400).json(errorMessages)
-      next(error)
+      error.status = 400;
+      next(error);
     }else{
-      throw error
+      if(error.name ==="SequelizeUniqueConstraintError"){
+        error.status = 400;
+        error.message = "Email already exist"
+        next(error);
+      }else {
+        error.status = 400;
+        next(error);
+      }
     }
   })
 })
 
 //get all the courses
-router.get('/courses',(req,res)=>{
+router.get('/courses',(req,res,next)=>{
   Course.findAll({
     order:[['createdAt','DESC']],
     include:[
@@ -114,7 +106,7 @@ router.get('/courses',(req,res)=>{
     attributes:{exclude:['createdAt','updatedAt']}
   }).then(function(courses){
     res.status(200).json(courses);
-  })
+  }).catch(error=>next(error))
 })
 
 //get a course
@@ -129,46 +121,50 @@ router.get('/courses/:id', (req,res)=>{
     attributes:{exclude:['createdAt','updatedAt']}
   }).then(function(course){
     res.status(200).json(course);
-  })
+  }).catch(error => next(error));
 })
 
 //post new course
-router.post('/courses',authenticateUser, (req,res)=>{
+router.post('/courses',authenticateUser, (req,res,next)=>{
   Course.create(req.body).then(function(course){
-    res.status(201).redirect(`/api/courses/${course.id}`)
+    res.status(201).location(`/api/courses/${course.id}`).end();
   }).catch(error=>{
     if(error.name==="SequelizeValidationError"){
-      const errorMessages= error.errors.map(error=> error.message);
-      console.log(error)
-      res.status(400).json(errorMessages)
+      error.status = 400;
+      next(error);
     }else{
-      throw error
+      next(error);
     }
   })
 })
 
 //put course
-router.put('/courses/:id',authenticateUser, authorizeUser, (req,res)=>{
-  Course.findByPk(req.params.id).then(function(course){
-    course.update(req.body).then(function(){
+router.put('/courses/:id',authenticateUser, authorizeUser, (req,res,next)=>{
+  const updatedCourse = Object.assign({
+    title:null,
+    description:null,
+    estimatedTime:null,
+    materialsNeeded:null,
+    userId: null
+  },req.body)
+    Course.update(updatedCourse,{where:{id:req.params.id}}).then(function(){
       res.status(204).end();
     }).catch(error=>{
       if(error.name==="SequelizeValidationError"){
-        const errorMessages= error.errors.map(error=> error.message);
-        res.status(400).json(errorMessages)
+        error.status = 400;
+        next(error);
       }else{
-        throw error
+        next(error);
       }
     })
-  })
 })
 
 //delete course
 router.delete('/courses/:id',authenticateUser, authorizeUser, (req,res)=>{
   Course.findByPk(req.params.id).then(function(course){
     course.destroy().then(function(){
-      res.status(204).end();
-    });
+      res.status(204).location(`/api/courses/${course.id}`).end();
+    }).catch(error => next(error));
   })
 })
 

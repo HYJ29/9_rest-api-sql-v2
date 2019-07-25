@@ -5,14 +5,16 @@ module.exports = (sequelize, DataTypes) => {
       type:DataTypes.STRING,
       allowNull:false,
       validate:{
-        notEmpty:true
+        notEmpty:{msg:'Title cannot be empty.'},
+        notNull:{msg:'Title cannot be null.'}
       }
     },
     description: {
       type:DataTypes.TEXT,
       allowNull:false,
       validate:{
-        notEmpty:true
+        notEmpty:{msg:'Description cannot be empty.'},
+        notNull:{msg:'Description cannot be null.'}
       }
     },
     estimatedTime: {
@@ -28,6 +30,14 @@ module.exports = (sequelize, DataTypes) => {
     // associations can be defined here
     Course.belongsTo(models.User, {
       as:'user',
+      foreignKey:{
+        allowNull:false,
+        validate:{
+          notEmpty:{msg:'UserId cannot be empty.'},
+          notNull:{mesg:'UserId cannot be null.'}
+        }
+      }
+
     })
   };
   return Course;

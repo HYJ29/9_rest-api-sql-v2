@@ -1,3 +1,10 @@
+## Something need to learn 
+1. how to set loaction Header to '/' ? 
+
+2. where is the code preventing to create same email users? 
+
+3. Is my error handling is handled properly?
+
 
 # Full Stack JavaScript Techdegree v2 - REST API Project
 

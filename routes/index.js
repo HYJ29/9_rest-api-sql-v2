@@ -4,6 +4,7 @@ const auth = require('basic-auth');
 const router = express.Router();
 const {Course, User} = require('../models');
 
+
 //authenticating middelware
 const authenticateUser = async (req,res,next) =>{
   let message = null;
@@ -39,20 +40,27 @@ const authenticateUser = async (req,res,next) =>{
 const authorizeUser = (req,res,next) =>{
   Course.findByPk(req.params.id)
     .then(course => {
-      if(req.currentUser.id === course.userId){
-        next();
+      if(course){
+        if(req.currentUser.id === course.userId){
+          next();
+        } else {
+          const error = new Error("Not authorized to access");
+          error.status = 403;
+          next(error);
+        }
       } else {
-        const error = new Error("Not authorized to access");
-        error.status = 403;
+        const error = new Error(`there is no id:${req.params.id}`)
+        error.status =404;
         next(error);
       }
+
     })
 }
 
 
 //get all the users
 router.get('/users',authenticateUser,(req,res)=>{
-  User.findAll({
+  User.findByPk(req.currentUser.id,{
     order:[['createdAt','DESC']],
     include:[
       {
@@ -100,7 +108,7 @@ router.get('/courses',(req,res,next)=>{
       {
         model: User,
         as:'user',
-        attributes:{exclude:['password','createdAt','updatedAt']}
+         attributes:{exclude:['password','createdAt','updatedAt']}
       }
     ],
     attributes:{exclude:['createdAt','updatedAt']}
@@ -110,17 +118,25 @@ router.get('/courses',(req,res,next)=>{
 })
 
 //get a course
-router.get('/courses/:id', (req,res)=>{
+router.get('/courses/:id', (req,res,next)=>{
   Course.findByPk(req.params.id,{
     include:[
       {
         model: User,
-        as:'user'
+        as:'user',
+        attributes:{exclude:['password','createdAt','updatedAt']}
       }
     ],
     attributes:{exclude:['createdAt','updatedAt']}
   }).then(function(course){
-    res.status(200).json(course);
+    if(course){
+      res.status(200).json(course);
+    } else {
+      const error = new Error(`there is no id:${req.params.id}`)
+      error.status =404;
+      next(error);
+    }
+
   }).catch(error => next(error));
 })
 
